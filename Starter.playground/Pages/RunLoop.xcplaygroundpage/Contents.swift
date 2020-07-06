@@ -2,13 +2,39 @@ import Combine
 import SwiftUI
 import PlaygroundSupport
 
+//Note: Nowadays RunLoop is a less useful class, as DispatchQueue is a sensible choice in most situations. This said, there are still some specific cases where run loops are useful. For example, Timer schedules itself on a RunLoop.
 let source = Timer
   .publish(every: 1.0, on: .main, in: .common)
   .autoconnect()
   .scan(0) { (counter, _) in counter + 1 }
+ 
+var threadRecorder: ThreadRecorder? = nil
 
-<# Add code here #>
 
+let setupPublisher = { recorder in
+  source
+    // 1
+//    .subscribe(on: DispatchQueue.global()) //If you use subscribe, it will subscribe to the current thread. Which it will be thread 1 because in this thread is running the app.
+    .receive(on: DispatchQueue.global()) // here, is going to receive the values in any thread from Global.
+    .handleEvents(receiveSubscription: { _ in threadRecorder = recorder })
+    .recordThread(using: recorder)
+    // 2
+    .receive(on: RunLoop.current) //Because the clousure is called by ThreadRecorderView (see bellow), RunLoop curret is the main thread (Thread 1)
+    .recordThread(using: recorder)
+    .eraseToAnyPublisher()
+}
+
+let view = ThreadRecorderView(title: "Using RunLoop", setup: setupPublisher)
+PlaygroundPage.current.liveView = UIHostingController(rootView: view)
+
+
+RunLoop.current.schedule(
+    after: .init(Date(timeIntervalSinceNow: 4.5)),
+    tolerance: .milliseconds(500)) {
+        threadRecorder?.subscription?.cancel()
+}
+
+//One particular pitfall to avoid is using RunLoop.current in code executing on a DispatchQueue. This is because DispatchQueue threads can be ephemeral, which makes them nearly impossible to rely on with RunLoop.
 //: [Next](@next)
 /*:
  Copyright (c) 2019 Razeware LLC

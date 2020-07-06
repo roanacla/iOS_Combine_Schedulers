@@ -2,8 +2,38 @@ import Combine
 import SwiftUI
 import PlaygroundSupport
 
-<# Add code here #>
+//A DispatchQueue can be either serial (the default) or concurrent. A serial queue executes all the work items you feed it, in sequence. A concurrent queue will start multiple work items in parallel, to maximize CPU usage.
+//DispatchQueue is the only scheduler providing a set of options you can pass when operators take a SchedulerOptions argument.
 
+
+let serialQueue = DispatchQueue(label: "Serial queue")
+let sourceQueue = DispatchQueue.main
+//let sourceQueue = serialQueue
+
+// 1
+let source = PassthroughSubject<Void, Never>()
+
+// 2
+let subscription = sourceQueue.schedule(after: sourceQueue.now,
+                                        interval: .seconds(1)) {
+  source.send()
+}
+
+let setupPublisher = { recorder in
+  source
+    .recordThread(using: recorder)
+//    .receive(on: serialQueue)
+    .receive(
+      on: serialQueue,
+      options: DispatchQueue.SchedulerOptions(qos: .userInteractive)
+    )//You don't need to setup options in the majority of cases. GCD handles very way the QOS (Quality of service). .userInteractive is high priority while .backgroud is less priority.
+    .recordThread(using: recorder)
+    .eraseToAnyPublisher()
+}
+
+    let view = ThreadRecorderView(title: "Using DispatchQueue",
+                              setup: setupPublisher)
+PlaygroundPage.current.liveView = UIHostingController(rootView: view)
 //: [Next](@next)
 /*:
  Copyright (c) 2019 Razeware LLC
